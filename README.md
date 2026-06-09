@@ -15,6 +15,7 @@ a raw endpoint) and lets Claude pick per task — nothing is hardcoded to one ve
 |---|---|
 | [`scope-to-ship`](scope-to-ship/) | Ship a feature with **one aligned agent**: discuss + scope → write a tiny ADR → execute against a Master PRD → dogfood end-to-end. The anti-fan-out methodology. |
 | [`ultracode-external-agents`](ultracode-external-agents/) | Author ultracode workflows whose `agent()` steps run on an **external CLI** (Codex / Cursor / opencode) instead of Claude subagents — bridge any step onto another model. |
+| [`loopify`](loopify/) | Design, scaffold, and **audit autonomous agent loops**: qualify a recurring task (and refuse when it doesn't fit), build the minimum viable loop (automation + standing context + state file + objective gate), dry-run, then schedule. |
 
 ### Delegate to another coding agent
 | Skill | What it does |
