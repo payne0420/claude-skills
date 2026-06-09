@@ -57,12 +57,18 @@ don't take the premise on faith:
 |---|---|---|
 | 1 | **The task recurs ≥ weekly.** | Ask, or check git/CI history. Less than weekly → setup never amortizes; a saved prompt or plain skill wins. |
 | 2 | **An objective gate exists.** A command with an exit code — tests, type check, build, linter — that can reject bad output with nobody in the room. | Actually run the candidate gate now. "A second agent reviews it" is not a gate — that's two optimists agreeing. |
-| 3 | **The budget absorbs the waste.** Loops retry and re-read; heavy verification on a metered plan ends in a rate limit or an invoice. | On consumer plans, check headroom with `track-usage` / `harness-usage` before committing. |
+| 3 | **The budget absorbs the waste.** Loops retry and re-read; heavy verification on a metered plan ends in a rate limit or an invoice. | Size it: a single-agent run is ~50–200k tokens; a daily schedule compounds to millions per week. On consumer plans, check headroom with `track-usage` / `harness-usage` before committing. |
 | 4 | **The executor has senior-engineer tools.** Logs, a repro environment, the ability to run the code it changes. | Confirm the loop's runtime context can actually execute the gate and reproduce failures. |
 
 **Fail any condition → STOP.** Deliver the alternative instead — a well-aimed
 reusable prompt or an ordinary skill — and name the condition that failed. This
 refusal is half the skill's value.
+
+One exception: when **budget is the only failing condition**, a cheaper executor
+can flip it — run the loop body on a low-cost provider via `opencode`
+(model-agnostic) or `llm-endpoint`. The objective gate keeps quality honest
+regardless of executor strength; budget-bound loops are exactly where
+engine-agnosticism pays.
 
 Hard exclusions regardless of the test (these keep a human in the chair):
 architecture rewrites, auth/payments/billing code, production deploys, dependency
@@ -188,6 +194,10 @@ specific finding and fix. Apply fixes when asked.
 
 ## Honest scope
 
+- **This skill builds closed loops** — bounded unit of work, gate on every pass,
+  hard stops. Open/exploratory looping (hand the agent a goal and let it roam)
+  is a research tool for unmetered budgets; pointed at real work with loose
+  standards it's a slop machine. Out of scope here — say so when asked for one.
 - **Most tasks fail qualification.** The honest version of loop engineering is
   that a single well-aimed prompt still wins for one-offs, exploration, and
   judgment-call work. Saying "no loop" with a good prompt instead is a success.
