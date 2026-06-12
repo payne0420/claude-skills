@@ -301,6 +301,11 @@ the background process exits and notifies you — the same long-task pattern the
 `codex-exec` / `cursor-agent` / `opencode` skills use. Or split the work into
 smaller delegated steps so no single call approaches the limit.
 
+To check on a backgrounded CLI without killing it (finished vs. still working vs.
+wedged), each backend skill has a verified **"Monitoring a running instance
+(liveness)"** section with read-only checks — load the matching skill and use
+those rather than guessing from process existence alone.
+
 ## Example: a panel (one of several shapes)
 
 The minimal form is a single bridged step — `const r = await

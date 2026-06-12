@@ -211,6 +211,32 @@ opencode run "do the big refactor" --attach http://localhost:4096 -m opencode-go
   `step_finish` (carrying `tokens` and `cost`), plus tool events when the agent
   acts. Parse `text` parts for the answer (see workflow 5).
 
+## Monitoring a running instance (liveness)
+
+Tell a backgrounded / orchestrator-owned run's state apart — finished, still
+working, or wedged — without killing anything. All checks are **read-only**.
+
+```bash
+pgrep -fl "opencode run"                        # alive? (wrapper shells may also match)
+ls -l out.txt                                   # redirected stdout — `> agent · model` header appears within seconds
+stat -f '%z %Sm' ~/.local/share/opencode/opencode.db-wal   # global session DB, written at message boundaries
+lsof -p <pid> -a -i | grep ESTABLISHED          # in-flight request
+```
+
+- **Finished**: exit 0, stdout holds the header + answer (verified: header within
+  seconds, answer by exit). Hard failure → non-zero exit (verified: bad model →
+  exit 1, `Error: Model not found` in the output).
+- **Still working**: process alive + `opencode.db-wal` mtime advancing. The wal is
+  **global** (any concurrent opencode invocation also freshens it — verified) and
+  written only at message boundaries, so it goes quiet during a long tool call or a
+  slow model turn — a few quiet minutes are normal.
+- **Wedged** (observed live on a flaky network): process alive 10+ min, stdout
+  still 0 bytes (the first response never arrived), db-wal untouched since startup,
+  and the once-held ESTABLISHED connection gone with no replacement — the request
+  was lost and opencode never recovered. The UTC-named per-invocation files in
+  `~/.local/share/opencode/log/` are **not** a liveness signal — logging stops
+  seconds after launch; a new file there only tells you a run *started*.
+
 ## Context files
 
 opencode reads `AGENTS.md` for project/user conventions and project config from
