@@ -200,7 +200,8 @@ true`) and capture output to a file.
   Extract the answer with `| jq -r .result`.
 - `--output-format stream-json` → NDJSON event stream (verified types): `system`
   (init: model, cwd, `permissionMode`), `user`, `assistant`, `text`/`word`
-  (incremental text), `tool_call` (one per file edit / shell command), then `result`.
+  (incremental text), `tool_call` (one per file edit / shell command), `connection`/
+  `retry` (network-drop recovery, with `attempt` counter), then `result`.
   Add `--stream-partial-output` for finer text deltas.
 
 ```bash
@@ -230,6 +231,13 @@ find ~/.cursor/projects/*/agent-transcripts -name '*.jsonl' -mmin -2   # transcr
   `/`→`-`, e.g. `Users-payne-Github-myrepo`) to *your* run before trusting it.
 - **Wedged**: process alive but its session files untouched for 10+ min (heuristic).
   On slow networks a turn can legitimately take minutes — check twice before judging.
+- **Network drops** (verified by cutting the connection mid-stream): it reconnects
+  with exponential backoff and resumes cleanly when the network returns (15 s outage
+  → exit 0, intact answer); if it never returns, it gives up after ~10 attempts /
+  ~7 min with **exit 1** and `Connection failed repeatedly` on stderr — it does not
+  wedge. In `stream-json`, each attempt is visible as a
+  `{"type":"connection","subtype":"reconnecting","attempt":N}` + `{"type":"retry"}`
+  event pair, so a watcher can tell "retrying" from "dead".
 
 ## Context files
 
