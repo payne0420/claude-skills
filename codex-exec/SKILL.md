@@ -284,6 +284,29 @@ echo "one-line summary of this repo" | codex exec -s read-only --json \
 # ...or simply use -o /path and read the file.
 ```
 
+## Monitoring a running instance (liveness)
+
+Tell a backgrounded / orchestrator-owned run's state apart — finished, still
+working, or wedged — without killing anything. All checks are **read-only**.
+
+```bash
+pgrep -fl "codex exec"                          # alive? two procs per run (node wrapper + vendor binary); "codex app-server" is unrelated
+ls -l out.txt                                   # the -o file — written ONLY when the run finishes
+find ~/.codex/sessions -name '*.jsonl' -mmin -2 # rollout appended continuously while it works
+lsof -p <binary-pid> -a -i | grep ESTABLISHED   # in-flight API connection — use the vendor *binary*'s pid, not the node wrapper's
+```
+
+- **Finished**: the `-o` file exists with fresh mtime (verified absent for an entire
+  ~6-min run, then appears with the final message at exit 0). Hard failure → non-zero
+  exit (verified: bad model → exit 1) and the `-o` file is never created.
+- **Still working**: process alive + its rollout
+  `~/.codex/sessions/YYYY/MM/DD/rollout-<launch-ts>-<uuid>.jsonl` (created at launch,
+  appended throughout — verified growing mid-run) has mtime within ~2 min. Every
+  codex session writes a rollout — match yours by the launch timestamp in the name.
+- **Wedged**: process alive but rollout stale 10+ min (heuristic). ESTABLISHED
+  connection + stale rollout suggests a hung request; codex retries transient API
+  errors itself, and on slow networks turns take minutes — check twice before judging.
+
 ## Context files (AGENTS.md)
 
 Codex reads `AGENTS.md` for project/user instructions, analogous to `CLAUDE.md`:

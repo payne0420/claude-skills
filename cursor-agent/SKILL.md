@@ -208,6 +208,29 @@ true`) and capture output to a file.
 cursor-agent -p "build the feature" --trust --output-format stream-json
 ```
 
+## Monitoring a running instance (liveness)
+
+Tell a backgrounded / orchestrator-owned run's state apart — finished, still
+working, or wedged — without killing anything. All checks are **read-only**.
+
+```bash
+pgrep -fl cursor-agent                           # alive? (also matches wrapper shells of other runs)
+ls -l out.txt                                    # the redirected-stdout file
+find ~/.cursor/chats -type f -mmin -2            # session store (store.db-wal) touched = an agent is working
+find ~/.cursor/projects/*/agent-transcripts -name '*.jsonl' -mmin -2   # transcript appended during multi-step runs
+```
+
+- **Finished**: process gone + stdout file non-empty. ⚠️ With `--output-format text`
+  the file stays **0 bytes until the very end** (verified) — file growth is a
+  progress signal only with `stream-json`, which appends events every few seconds
+  mid-run (verified).
+- **Still working**: process alive + a file under `~/.cursor/chats/<hash>/<chat-id>/`
+  or `~/.cursor/projects/<cwd-slug>/agent-transcripts/<id>/<id>.jsonl` fresh within
+  ~2 min. Both dirs are shared by all runs — match `<cwd-slug>` (the run's cwd with
+  `/`→`-`, e.g. `Users-payne-Github-myrepo`) to *your* run before trusting it.
+- **Wedged**: process alive but its session files untouched for 10+ min (heuristic).
+  On slow networks a turn can legitimately take minutes — check twice before judging.
+
 ## Context files
 
 Cursor reads `AGENTS.md` and `.cursor/rules/*` for project/user conventions. For a
