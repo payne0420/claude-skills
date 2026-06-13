@@ -203,6 +203,56 @@ opencode serve --port 4096                       # headless server
 opencode run "do the big refactor" --attach http://localhost:4096 -m opencode-go/deepseek-v4-pro
 ```
 
+### 8. Headless parallel fan-out (one agent spawns many)
+
+opencode supports **two** fan-out modes — both verified robust under load (16
+isolated children in a single wave = 16/16; 32 children in overlapping waves,
+peak ~17 in-flight = 32/32; **no concurrency ceiling found, ~100% completion**).
+
+**Mode A — shell-out children (isolated writes).** A `build` parent (its `allow *`
+policy lets it run `opencode run` as a shell command — **no
+`--dangerously-skip-permissions` needed**) spawns child `opencode run` processes.
+opencode has **no native `-w`/worktree flag**, so isolate writes with a **manual
+git worktree per child + `--dir`**:
+
+```bash
+for task in A B C; do
+  git worktree add -q -b "wt-$task" "/tmp/wt-$task" HEAD
+  ( opencode run "<self-contained prompt — stdin is ignored, inline ALL context>" \
+      --agent build -m opencode-go/<model> --dir "/tmp/wt-$task" > "out-$task.log" 2>&1 ) &
+done
+wait   # MANDATORY (parent exit orphans children) — AND give each child a hard-kill timeout
+# verify each child actually made its change (exit 0 ≠ work done), then merge worktrees
+```
+
+Each child is a separate OS process and session; nesting is unrestricted (no
+recursion guard — children just inherit `OPENCODE=1`, `OPENCODE_PROCESS_ROLE`,
+`OPENCODE_RUN_ID`). Use distinct worktrees: two children writing the **same file**
+in the same tree can silently lose an edit.
+
+**Mode B — native subagents (`task` tool).** Set
+`OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=1` and opencode exposes a **`task`**
+tool that spawns **truly parallel in-process subagents** (verified: two tasks ran
+concurrently) — the clean analog to a UI "spawn subagents" button, no process
+management:
+
+```bash
+OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=1 \
+  opencode run "Use the task tool to do these in parallel: <subtask 1>; <subtask 2>." \
+  --agent build -m opencode-go/<model>
+```
+
+Subagent types: `explore` (read-only) and `general` (write-capable) — both verified.
+Native subagents **share the parent's workspace** (no `--dir` isolation), so give
+each one a **disjoint file/area** to avoid collisions. Prefer Mode B for parallel
+read/research/analysis; prefer Mode A when children must make **isolated** edits to
+the same repo.
+
+**Watchdog every child regardless of mode.** opencode does **not** self-recover
+from a lost backend request — a rare transient stall leaves the process alive but
+idle (0-byte output, no connection, no DB writes) indefinitely. A per-child
+hard-kill timeout is the safety net; don't assume a hung child will ever return.
+
 ## Output / event format
 
 - `--format default` → formatted text (shows the active `agent · model`, then the
@@ -258,3 +308,8 @@ can be defined there or via `opencode agent` — useful for a reusable read-only
 - **Model-agnostic is the strength** — for a true second opinion, run a different
   provider than your own and reconcile the two views for the user.
 - **Don't leak secrets** into prompts sent to an external model/provider.
+- **Parallel fan-out** (workflow 8): shell-out children need a manual `git worktree`
+  + `--dir` (no native `-w`); native `task` subagents
+  (`OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=1`) run parallel but share the
+  workspace. opencode **won't self-recover a hung request** — always watchdog each
+  child with a hard-kill timeout.
