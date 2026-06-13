@@ -193,6 +193,51 @@ cursor-agent -p --trust -w feature-x "Implement feature X end to end."
 For long tasks, launch it in the background (in this harness, `run_in_background:
 true`) and capture output to a file.
 
+### 8. Headless parallel fan-out (one agent spawns many)
+
+`cursor-agent -p` **can spawn child `cursor-agent -p` processes and run them in
+parallel** — either you script the loop, or a `--force` parent does it through its
+own shell tool (in `-p` it "has access to all tools, including write and shell").
+There is **no native fan-out/join subcommand** and **no recursion guard**
+(`CURSOR_AGENT=1` is set in children but nothing blocks on it — verified nesting
+runs fine), so you hand-roll it. The canonical pattern:
+
+```bash
+# One worktree per child (no write collisions) + --force (headless approval) + json (mergeable)
+for task in A B C; do
+  ( cursor-agent -p --force -w "wt-$task" \
+      "<fully self-contained prompt — stdin is ignored, inline ALL context>" \
+      --output-format json > "out-$task.json" 2>&1 ) &
+done
+wait        # MANDATORY — see trap 3
+# merge: read out-*.json (.result, .usage), then `git -C <worktree>` to collect edits
+```
+
+Verified empirically: 3 children in separate worktrees ran truly concurrently
+(~37s wall, staggered finishes, each worktree held only its own edit, main tree
+untouched); 6 concurrent `ask` children = 6/6 success, no rate-limiting; a single
+`--force` parent, told to isolate per-child, autonomously created the right
+worktrees and captured each child's stdout. Three **silent** failure modes — each
+produces no error, just wrong/empty results:
+
+1. **No `--force` → children never run.** In `-p` there's no human to approve the
+   spawn command, so the parent's shell calls are rejected outright. `--force`/
+   `--yolo` is mandatory for the parent. (Verified: without it, "every attempt to
+   execute it via the Shell tool was rejected.")
+2. **Shared tree → silent lost update.** Two concurrent writers on the same file
+   with no worktree → one edit silently vanished (no error, no `index.lock`).
+   Give every child its own `-w/--worktree`; isolation was perfect in every test.
+3. **`&` without `wait` → orphaned children.** If the parent shell exits before the
+   children finish, they die mid-flight and make no edits. Always `wait` (or
+   `nohup`/`disown` for true fire-and-forget). (Verified: the parent's first
+   attempts lost their children exactly this way until it added `wait`.)
+
+Auth rides on the on-disk login (no `CURSOR_API_KEY` needed locally; set it for CI);
+`--trust` is sticky per-dir so children inherit it. Latency stacks ~20-30s per
+nesting layer, so keep nests shallow. **Tell the agent to isolate explicitly** — it
+self-isolates correctly when instructed but won't reliably infer it; for determinism,
+script the loop yourself rather than asking one `-p` agent to orchestrate.
+
 ## Output / event format
 
 - `--output-format text` → just the final answer text.
@@ -261,3 +306,6 @@ rules directly in the prompt. `cursor-agent generate-rule` scaffolds a new rule.
   `gpt-5`/etc.) — when used as a second opinion, surface both views rather than
   assuming cursor is right.
 - **Don't leak secrets** into prompts sent to an external model.
+- **Parallel fan-out has three silent traps** (see workflow 8): no `--force` →
+  children silently never run; shared tree → silent lost-update (use one `-w`
+  worktree per child); `&` without `wait` → parent exit orphans the children.
