@@ -31,6 +31,11 @@ a raw endpoint) and lets Claude pick per task — nothing is hardcoded to one ve
 | [`eval-loop`](eval-loop/) | Stand up an **eval loop**: score AI output against a rubric, gate what's below the line, turn every failure into a permanent test. |
 | [`find-docs`](find-docs/) | Fetch **current** library / framework / SDK / CLI docs via Context7 — instead of trusting training-data API surface. |
 
+### Forge & git hosting
+| Skill | What it does |
+|---|---|
+| [`forgejo`](forgejo/) | Operate a self-hosted **Forgejo** (Gitea-compatible) forge via its REST API — repos, files, branches, issues, PRs, labels, milestones, releases — plus git over HTTPS/SSH. Configurable per instance via env vars; verified against Forgejo v15. |
+
 ### Usage tracking
 | Skill | What it does |
 |---|---|
